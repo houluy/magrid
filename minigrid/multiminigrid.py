@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import hashlib
 import math
 from abc import abstractmethod
@@ -21,7 +19,7 @@ from minigrid.core.world_object import Point, WorldObj
 T = TypeVar("T")
 
 
-class MiniGridEnv(gym.Env):
+class MultiMiniGridEnv(gym.Env):
     """
     2D grid world game environment
     """
@@ -34,6 +32,7 @@ class MiniGridEnv(gym.Env):
     def __init__(
         self,
         mission_space: MissionSpace,
+        agent_nb: int = 2,
         grid_size: int | None = None,
         width: int | None = None,
         height: int | None = None,
@@ -102,9 +101,12 @@ class MiniGridEnv(gym.Env):
 
         self.see_through_walls = see_through_walls
 
+        # NEW: Agent number
+        self.agent_nb = agent_nb
+
         # Current position and direction of the agent
-        self.agent_pos: np.ndarray | tuple[int, int] = None
-        self.agent_dir: int = None
+        self.agent_pos: np.ndarray | list[tuple[int, int]] = None
+        self.agent_dir: list[int] = None
 
         # Current grid and mission and carrying
         self.grid = Grid(width, height)
@@ -123,24 +125,25 @@ class MiniGridEnv(gym.Env):
         options: dict[str, Any] | None = None,
     ) -> tuple[ObsType, dict[str, Any]]:
         super().reset(seed=seed)
-
         # Reinitialize episode-specific variables
-        self.agent_pos = (-1, -1)
-        self.agent_dir = -1
+        self.agent_nb = 2
+        self.agent_pos = [(-1, -1 + i) for i in range(self.agent_nb)]
+        self.agent_dir = [-1 for _ in range(self.agent_nb)]
 
         # Generate a new random grid at the start of each episode
         self._gen_grid(self.width, self.height)
 
         # These fields should be defined by _gen_grid
         assert (
-            self.agent_pos >= (0, 0)
-            if isinstance(self.agent_pos, tuple)
-            else all(self.agent_pos >= 0) and self.agent_dir >= 0
+            all([pos >= (0, 0) for pos in self.agent_pos])
+            if isinstance(self.agent_pos, list)
+            else all(self.agent_pos >= 0) and all([direct >= 0 for direct in self.agent_dir])
         )
 
         # Check that the agent doesn't overlap with an object
-        start_cell = self.grid.get(*self.agent_pos)
-        assert start_cell is None or start_cell.can_overlap()
+        for pos in self.agent_pos:
+            start_cell = self.grid.get(*pos)
+            assert start_cell is None or start_cell.can_overlap()
 
         # Item picked up, being carried, initially nothing
         self.carrying = None
@@ -162,7 +165,7 @@ class MiniGridEnv(gym.Env):
         """
         sample_hash = hashlib.sha256()
 
-        to_encode = [self.grid.encode().tolist(), self.agent_pos, self.agent_dir]
+        to_encode = [self.grid.encode().tolist(), *self.agent_pos, *self.agent_dir]
         for item in to_encode:
             sample_hash.update(str(item).encode("utf8"))
 
@@ -205,31 +208,32 @@ class MiniGridEnv(gym.Env):
         if self.agent_pos is None:
             return super().__str__()
 
-        for j in range(self.grid.height):
-            for i in range(self.grid.width):
-                if i == self.agent_pos[0] and j == self.agent_pos[1]:
-                    output += 2 * AGENT_DIR_TO_STR[self.agent_dir]
-                    continue
+        for p_ind, pos in enumerate(self.agent_pos):
+            for j in range(self.grid.height):
+                for i in range(self.grid.width):
+                    if i == pos[0] and j == pos[1]:
+                        output += 2 * AGENT_DIR_TO_STR[self.agent_dir[p_ind]]
+                        continue
 
-                tile = self.grid.get(i, j)
+                    tile = self.grid.get(i, j)
 
-                if tile is None:
-                    output += "  "
-                    continue
+                    if tile is None:
+                        output += "  "
+                        continue
 
-                if tile.type == "door":
-                    if tile.is_open:
-                        output += "__"
-                    elif tile.is_locked:
-                        output += "L" + tile.color[0].upper()
-                    else:
-                        output += "D" + tile.color[0].upper()
-                    continue
+                    if tile.type == "door":
+                        if tile.is_open:
+                            output += "__"
+                        elif tile.is_locked:
+                            output += "L" + tile.color[0].upper()
+                        else:
+                            output += "D" + tile.color[0].upper()
+                        continue
 
-                output += OBJECT_TO_STR[tile.type] + tile.color[0].upper()
+                    output += OBJECT_TO_STR[tile.type] + tile.color[0].upper()
 
-            if j < self.grid.height - 1:
-                output += "\n"
+                if j < self.grid.height - 1:
+                    output += "\n"
 
         return output
 
@@ -354,7 +358,7 @@ class MiniGridEnv(gym.Env):
                 continue
 
             # Don't place the object where the agent is
-            if np.array_equal(pos, self.agent_pos):
+            if np.isin(pos, self.agent_pos):
                 continue
 
             # Check if there is a filtering criterion
@@ -385,29 +389,35 @@ class MiniGridEnv(gym.Env):
         Set the agent's starting point at an empty position in the grid
         """
 
-        self.agent_pos = (-1, -1)
-        pos = self.place_obj(None, top, size, max_tries=max_tries)
-        self.agent_pos = pos
+        self.agent_pos = [(-1, -1 + i) for i in range(self.agent_nb)]
+
+        poses = []
+
+        for ind in range(self.agent_nb):
+            pos = self.place_obj(None, top, size, max_tries=max_tries)
+            self.agent_pos[ind] = pos
+            poses.append(pos)
 
         if rand_dir:
-            self.agent_dir = self._rand_int(0, 4)
+            self.agent_dir = [self._rand_int(0, 4) for _ in range(self.agent_nb)]
 
-        return pos
+        return poses
 
     @property
-    def dir_vec(self):
+    def dir_vec(self) -> np.ndarray:
         """
         Get the direction vector for the agent, pointing in the direction
         of forward movement.
         """
 
         assert (
-            self.agent_dir >= 0 and self.agent_dir < 4
+            all([direct >= 0 and direct < 4 for direct in self.agent_dir]
         ), f"Invalid agent_dir: {self.agent_dir} is not within range(0, 4)"
-        return DIR_TO_VEC[self.agent_dir]
+
+        return np.array([DIR_TO_VEC[agent_dir] for agent_dir in self.agent_dir])
 
     @property
-    def right_vec(self):
+    def right_vec(self) -> np.ndarray:
         """
         Get the vector pointing to the right of the agent.
         """
@@ -416,7 +426,7 @@ class MiniGridEnv(gym.Env):
         return np.array((-dy, dx))
 
     @property
-    def front_pos(self):
+    def front_pos(self) -> np.ndarray:
         """
         Get the position of the cell that is right in front of the agent
         """
@@ -787,6 +797,3 @@ class MiniGridEnv(gym.Env):
     def close(self):
         if self.window:
             pygame.quit()
-
-
-
