@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Tuple, List
 
 import numpy as np
 
@@ -23,7 +23,7 @@ class Grid:
     """
 
     # Static cache of pre-renderer tiles
-    tile_cache: dict[tuple[Any, ...], Any] = {}
+    tile_cache: Dict[Tuple[Any, ...], Any] = {}
 
     def __init__(self, width: int, height: int):
         assert width >= 3
@@ -32,7 +32,7 @@ class Grid:
         self.width: int = width
         self.height: int = height
 
-        self.grid: list[WorldObj | None] = [None] * (width * height)
+        self.grid: List[WorldObj | None] = [None] * (width * height)
 
     def __contains__(self, key: Any) -> bool:
         if isinstance(key, WorldObj):
@@ -156,7 +156,7 @@ class Grid:
         """
 
         # Hash map lookup key for the cache
-        key: tuple[Any, ...] = (agent_dir, highlight, tile_size)
+        key: Tuple[Any, ...] = (agent_dir, highlight, tile_size)
         key = obj.encode() + key if obj else key
 
         if key in cls.tile_cache:
@@ -183,7 +183,7 @@ class Grid:
 
             # Rotate the agent based on its direction
             tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=0.5 * math.pi * agent_dir)
-            fill_coords(img, tri_fn, (255, 0, 0))
+            fill_coords(img, tri_fn, (255, 0, 0))  # Red triangle for agent
 
         # Highlight the cell if needed
         if highlight:
@@ -200,8 +200,8 @@ class Grid:
     def render(
         self,
         tile_size: int,
-        agent_pos: tuple[int, int],
-        agent_dir: int | None = None,
+        poses: List[Tuple[int, int]],
+        drts: List[int] | None = None,
         highlight_mask: np.ndarray | None = None,
     ) -> np.ndarray:
         """
@@ -224,11 +224,15 @@ class Grid:
             for i in range(0, self.width):
                 cell = self.get(i, j)
 
-                agent_here = np.array_equal(agent_pos, (i, j))
+                agent_here = (i, j) in poses
+                if agent_here:
+                    agent_dir = drts[poses.index((i, j))]
+                else:
+                    agent_dir = None
                 assert highlight_mask is not None
                 tile_img = Grid.render_tile(
                     cell,
-                    agent_dir=agent_dir if agent_here else None,
+                    agent_dir=agent_dir,
                     highlight=highlight_mask[i, j],
                     tile_size=tile_size,
                 )
@@ -288,7 +292,7 @@ class Grid:
 
         return grid, vis_mask
 
-    def process_vis(self, agent_pos: tuple[int, int]) -> np.ndarray:
+    def process_vis(self, agent_pos: Tuple[int, int]) -> np.ndarray:
         mask = np.zeros(shape=(self.width, self.height), dtype=bool)
 
         mask[agent_pos[0], agent_pos[1]] = True

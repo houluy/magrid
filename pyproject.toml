@@ -1,16 +1,15 @@
 # Package ######################################################################
 
-[build-system]
-requires = ["setuptools >= 61.0.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
-name = "minigrid"
-description = "Minimalistic gridworld reinforcement learning environments."
+name = "magrid"
+description = "Default template for PDM package"
 readme = "README.md"
-requires-python = ">= 3.7"
-authors = [{ name = "Farama Foundation", email = "contact@farama.org" }]
-license = { text = "MIT License" }
+requires-python = "==3.11.*"
+authors = [
+    { name = "Farama Foundation", email = "contact@farama.org" },
+    {name = "houlu", email = "houlu8674@bupt.edu.cn"},
+]
+license = { text = "MIT" }
 keywords = ["Memory, Environment, Agent, RL, Gymnasium"]
 classifiers = [
     "Development Status :: 4 - Beta",  # change to `5 - Production/Stable` when ready
@@ -28,8 +27,11 @@ dependencies = [
     "numpy>=1.18.0",
     "gymnasium>=0.28.1",
     "pygame>=2.4.0",
+    "gymnasium>=0.26",
+    "pygame>=2.2.0",
 ]
 dynamic = ["version"]
+version = "0.1.0"
 
 [project.optional-dependencies]
 testing = [
@@ -103,3 +105,6 @@ reportPrivateImportUsage = "none"
 
 [tool.pytest.ini_options]
 filterwarnings = ['ignore:.*step API.*:DeprecationWarning'] # TODO: to be removed when old step API is removed
+
+[tool.pdm]
+distribution = false
