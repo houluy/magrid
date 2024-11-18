@@ -8,8 +8,9 @@ env = MultiMiniGrid10x10(
 )
 
 obs, _ = env.reset()
-print(obs)
 while True:
-    env.render()
-    time.sleep(1)
-
+    state, reward, terminated, truncated, _ = env.step(env.random_actions())
+    print(state, reward, terminated, truncated)
+    time.sleep(0.1)
+    if terminated or truncated:
+        break

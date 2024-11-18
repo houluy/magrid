@@ -5,7 +5,7 @@ import gymnasium as gym
 import numpy as np
 import numpy.typing as npt
 
-from minigrid.core.actions import Actions
+from minigrid.core.actions import DriveActions
 from minigrid.core.constants import COLOR_NAMES, DIR_TO_VEC, TILE_PIXELS
 from minigrid.core.grid import Grid
 from minigrid.core.mission import MissionSpace
@@ -52,15 +52,92 @@ class Agent:
         else:
             self.color = color
 
+        # Env specific
+        self.step_count = 0
+        self.max_steps = 100
+
+        self.terminated = False
+        self.truncated = False
+
     @staticmethod
     def _check_drt(drt: int):
         assert drt in [0, 1, 2, 3], "Direction must be 0, 1, 2, or 3"
+
+    def possible_actions(self, grid):
+        if self.terminated or self.truncated:
+            return [DriveActions.wait]
+        if grid.off_the_grid(*self.front_pos):
+            return [DriveActions.left, DriveActions.right, DriveActions.wait]
+        else:
+            cell = grid.get(*self.front_pos)
+            if cell is not None and cell.type != "goal":
+                return [DriveActions.left, DriveActions.right, DriveActions.wait]
+        return [DriveActions.left, DriveActions.right, DriveActions.forward, DriveActions.wait]
+
+    def random_action(self, grid):
+        return random.choice(self.possible_actions(grid))
 
     def reset(self):
         self.name = self.initial_name
         self.idx = self.initial_idx
         self.pos = self.initial_pos
         self.drt = self.initial_drt
+        self.terminated = False
+        self.truncated = False
+
+    def _reward(self) -> float:
+        """
+        Compute the reward to be given upon success
+        """
+
+        return 1 - 0.9 * (self.step_count / self.max_steps)
+
+    def step(self, action: DriveActions, grid):
+        """
+        Update the agent state after its action.
+        """
+        match action:
+            case DriveActions.left:
+                self.drt = (self.drt - 1) % 4
+                reward = -1
+            case DriveActions.right:
+                self.drt = (self.drt + 1) % 4
+                reward = -1
+            case DriveActions.forward:
+                # Get the position in front of the agent
+                fwd_pos = self.front_pos
+                # Get the contents of the cell in front of the agent
+                fwd_cell = grid.get(*fwd_pos)
+                if fwd_cell is None or fwd_cell.can_overlap():
+                    self.pos = tuple(fwd_pos)
+                    reward = -1
+                if fwd_cell is not None and fwd_cell.type == "goal":
+                    self.terminated = True
+                    reward = self._reward()
+                if fwd_cell is not None and fwd_cell.type == "lava":
+                    self.terminated = True
+                    reward = -10
+            case DriveActions.wait:
+                reward = 0
+                pass
+            case _:
+                raise ValueError(f"Unknown action: {action}")
+
+        self.step_count += 1
+
+        if self.step_count == self.max_steps:
+            self.truncated = True
+        else:
+            self.truncated = False
+
+        return self.observe(), reward, self.terminated, self.truncated, {}
+ 
+    @property
+    def steps_remaining(self):
+        return self.max_steps - self.step_count
+
+    def observe(self):
+        return np.array([*self.pos, self.drt])
 
     @property
     def dir_vec(self) -> np.ndarray:
@@ -116,7 +193,7 @@ class Agent:
         return vx, vy
 
     def __str__(self):
-        return f"{self.name}, pos: "
+        return f"{self.name}, pos: {self.pos}, direction: {self.drt}"
 
     def pprint_grid(self, grid: Grid = None):
         """
@@ -314,14 +391,14 @@ class AgentList:
             return self.agents[idx]
         elif isinstance(idx, tuple):
             for agent in self.agents:
-                if agent.pos == idx:
+                if np.array_equal(agent.pos, idx):
                     return agent
             else:
                 return None
 
     def __contains__(self, pos: Point):
         for agent in self.agents:
-            if agent == pos:
+            if np.array_equal(agent.pos, pos):
                 return True
         else:
             return False

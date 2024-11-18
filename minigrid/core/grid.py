@@ -79,6 +79,9 @@ class Grid:
         assert self.grid is not None
         return self.grid[j * self.width + i]
 
+    def off_the_grid(self, i: int, j: int) -> bool:
+        return not (0 <= i < self.width and 0 <= j < self.height)
+
     def horz_wall(
         self,
         x: int,
@@ -219,7 +222,6 @@ class Grid:
         height_px = self.height * tile_size
 
         img = np.zeros(shape=(height_px, width_px, 3), dtype=np.uint8)
-
         # Render the grid
         for j in range(0, self.height):
             for i in range(0, self.width):

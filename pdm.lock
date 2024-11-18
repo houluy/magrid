@@ -4,8 +4,11 @@
 [metadata]
 groups = ["default"]
 strategy = ["cross_platform", "inherit_metadata"]
-lock_version = "4.4.1"
-content_hash = "sha256:9385cf82e391e525c87e5a43d0c2c7970ab6b93c3f44b997fadde502563292fd"
+lock_version = "4.5.0"
+content_hash = "sha256:2525590788018730794b27e347388efc98c707a0374e0e10ecd5232629a1bcea"
+
+[[metadata.targets]]
+requires_python = "==3.11.*"
 
 [[package]]
 name = "cloudpickle"
@@ -37,6 +40,7 @@ groups = ["default"]
 dependencies = [
     "cloudpickle>=1.2.0",
     "farama-notifications>=0.0.1",
+    "importlib-metadata>=4.8.0; python_version < \"3.10\"",
     "numpy>=1.21.0",
     "typing-extensions>=4.3.0",
 ]

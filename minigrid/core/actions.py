@@ -18,3 +18,15 @@ class Actions(IntEnum):
 
     # Done completing task
     done = 6
+
+    # Wait
+    wait = 7
+
+
+class DriveActions(IntEnum):
+    # Turn left, turn right, move forward
+    left = 0
+    right = 1
+    forward = 2
+    # Wait
+    wait = 3
