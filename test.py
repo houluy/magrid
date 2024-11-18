@@ -4,9 +4,8 @@ import time
 
 env = MultiMiniGrid10x10(
     mission_space=MissionSpace(lambda :"Junction"),
-    render_mode="human"
+    render_mode="human",
 )
-
 
 obs, _ = env.reset()
 print(obs)
